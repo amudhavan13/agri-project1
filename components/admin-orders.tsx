@@ -10,12 +10,23 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table"
+import { toast } from "sonner"
 
 interface OrderProduct {
   productId: string
   name: string
   price: number
   quantity: number
+}
+
+interface ReturnRequest {
+  type: 'return' | 'replacement'
+  reason: string
+  status: 'pending' | 'approved' | 'rejected' | 'picked' | 'completed'
+  requestDate: string
+  adminResponse?: string
+  pickedDate?: string
+  _id?: string
 }
 
 interface Order {
@@ -27,8 +38,9 @@ interface Order {
   }
   products: OrderProduct[]
   totalAmount: number
-  status: 'pending' | 'processing' | 'delivered' | 'cancelled'
+  status: string
   orderDate: string
+  returnRequest?: ReturnRequest
 }
 
 export default function AdminOrders() {
@@ -76,6 +88,61 @@ export default function AdminOrders() {
     }
   }
 
+  const handleAcceptRequest = async (orderId: string) => {
+    try {
+      console.log('Starting accept request for order:', orderId);
+      const response = await fetch(`/api/orders/${orderId}/return`, {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          status: 'approved',
+          adminResponse: 'Request approved',
+        }),
+      });
+
+      const data = await response.json();
+      console.log('Response from server:', data);
+
+      if (!response.ok) {
+        throw new Error(data.error || 'Failed to accept request');
+      }
+
+      toast.success(data.message || 'Request accepted successfully');
+      fetchOrders();
+    } catch (err) {
+      console.error('Detailed error in handleAcceptRequest:', err);
+      toast.error(err instanceof Error ? err.message : 'Failed to accept request');
+    }
+  };
+
+  const handlePickedRequest = async (orderId: string) => {
+    try {
+      console.log('Marking request as picked for order:', orderId);
+      const response = await fetch(`/api/orders/${orderId}/return`, {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          status: 'picked',
+          pickedDate: new Date().toISOString(),
+        }),
+      });
+
+      if (!response.ok) {
+        throw new Error('Failed to mark as picked');
+      }
+
+      toast.success('Request marked as picked successfully');
+      fetchOrders();
+    } catch (err) {
+      console.error('Error marking request as picked:', err);
+      toast.error('Failed to mark as picked');
+    }
+  };
+
   if (loading) {
     return <div className="text-center p-4">Loading orders...</div>
   }
@@ -97,6 +164,7 @@ export default function AdminOrders() {
             <TableHead>Total Amount</TableHead>
             <TableHead>Status</TableHead>
             <TableHead>Order Date</TableHead>
+            <TableHead>Return/Replacement</TableHead>
             <TableHead>Actions</TableHead>
           </TableRow>
         </TableHeader>
@@ -122,6 +190,7 @@ export default function AdminOrders() {
                   order.status === 'delivered' ? 'bg-green-100 text-green-800' :
                   order.status === 'pending' ? 'bg-yellow-100 text-yellow-800' :
                   order.status === 'processing' ? 'bg-blue-100 text-blue-800' :
+                  order.status.includes('return') || order.status.includes('replacement') ? 'bg-purple-100 text-purple-800' :
                   'bg-red-100 text-red-800'
                 }`}>
                   {order.status}
@@ -129,24 +198,86 @@ export default function AdminOrders() {
               </TableCell>
               <TableCell>{new Date(order.orderDate).toLocaleDateString()}</TableCell>
               <TableCell>
-                {order.status === 'pending' && (
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() => updateOrderStatus(order._id, 'processing')}
-                  >
-                    Mark Processing
-                  </Button>
+                {order.returnRequest && (
+                  <div className="space-y-1">
+                    <div className="text-sm">
+                      <span className={`font-medium ${
+                        order.returnRequest.type === 'return' ? 'text-red-600' : 'text-blue-600'
+                      }`}>
+                        {order.returnRequest.type.charAt(0).toUpperCase() + order.returnRequest.type.slice(1)}
+                      </span>
+                      <span className={`ml-2 px-2 py-0.5 rounded-full text-xs ${
+                        order.returnRequest.status === 'pending' ? 'bg-yellow-100 text-yellow-800' :
+                        order.returnRequest.status === 'approved' ? 'bg-blue-100 text-blue-800' :
+                        order.returnRequest.status === 'picked' ? 'bg-green-100 text-green-800' :
+                        order.returnRequest.status === 'completed' ? 'bg-gray-100 text-gray-800' :
+                        'bg-red-100 text-red-800'
+                      }`}>
+                        {order.returnRequest.status}
+                      </span>
+                    </div>
+                    <div className="text-sm text-gray-600">
+                      Reason: {order.returnRequest.reason}
+                    </div>
+                    {order.returnRequest.adminResponse && (
+                      <div className="text-sm text-gray-500">
+                        Response: {order.returnRequest.adminResponse}
+                      </div>
+                    )}
+                    {order.returnRequest.pickedDate && (
+                      <div className="text-sm text-gray-500">
+                        Picked: {new Date(order.returnRequest.pickedDate).toLocaleDateString()}
+                      </div>
+                    )}
+                  </div>
                 )}
-                {order.status === 'processing' && (
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() => updateOrderStatus(order._id, 'delivered')}
-                  >
-                    Mark Delivered
-                  </Button>
-                )}
+              </TableCell>
+              <TableCell>
+                <div className="space-y-2">
+                  {order.status === 'pending' && (
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => updateOrderStatus(order._id, 'processing')}
+                    >
+                      Mark Processing
+                    </Button>
+                  )}
+                  {order.status === 'processing' && (
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => updateOrderStatus(order._id, 'delivered')}
+                    >
+                      Mark Delivered
+                    </Button>
+                  )}
+                  {order.status === 'delivered' && order.returnRequest?.status === 'pending' && (
+                    <Button
+                      variant="default"
+                      size="sm"
+                      className="w-full bg-green-600 hover:bg-green-700 text-white"
+                      onClick={() => handleAcceptRequest(order._id)}
+                    >
+                      Accept {order.returnRequest.type}
+                    </Button>
+                  )}
+                  {order.returnRequest?.status === 'approved' && (
+                    <Button
+                      variant="default"
+                      size="sm"
+                      className="w-full bg-blue-600 hover:bg-blue-700 text-white"
+                      onClick={() => handlePickedRequest(order._id)}
+                    >
+                      Mark as Picked
+                    </Button>
+                  )}
+                  {order.returnRequest?.status === 'picked' && (
+                    <div className="text-sm text-green-600 font-medium text-center">
+                      Picked on {new Date(order.returnRequest.pickedDate!).toLocaleDateString()}
+                    </div>
+                  )}
+                </div>
               </TableCell>
             </TableRow>
           ))}

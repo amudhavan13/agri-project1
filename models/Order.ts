@@ -1,5 +1,32 @@
 import mongoose from 'mongoose';
 
+const returnRequestSchema = new mongoose.Schema({
+  type: {
+    type: String,
+    enum: ['return', 'replacement'],
+    required: true
+  },
+  reason: {
+    type: String,
+    required: true
+  },
+  status: {
+    type: String,
+    enum: ['pending', 'approved', 'rejected', 'picked', 'completed'],
+    default: 'pending'
+  },
+  requestDate: {
+    type: Date,
+    default: Date.now
+  },
+  adminResponse: {
+    type: String
+  },
+  pickedDate: {
+    type: Date
+  }
+});
+
 const orderSchema = new mongoose.Schema({
   user: {
     name: { type: String, required: true },
@@ -16,7 +43,20 @@ const orderSchema = new mongoose.Schema({
   totalAmount: { type: Number, required: true },
   status: {
     type: String,
-    enum: ['pending', 'processing', 'delivered', 'cancelled'],
+    enum: [
+      'pending',
+      'processing',
+      'delivered',
+      'cancelled',
+      'returned',
+      'replaced',
+      'return_approved',
+      'replacement_approved',
+      'return_in_progress',
+      'replacement_in_progress',
+      'return_pending',
+      'replacement_pending'
+    ],
     default: 'pending'
   },
   paymentMethod: {
@@ -26,15 +66,24 @@ const orderSchema = new mongoose.Schema({
   },
   paymentStatus: {
     type: String,
-    enum: ['pending', 'paid', 'failed'],
+    enum: ['pending', 'paid', 'failed', 'refunded'],
     default: 'pending'
   },
   orderDate: {
     type: Date,
     default: Date.now
-  }
+  },
+  deliveryDate: {
+    type: Date
+  },
+  returnRequest: returnRequestSchema
 });
 
-const Order = mongoose.models.Order || mongoose.model('Order', orderSchema);
+// Delete the existing model to force schema update
+if (mongoose.models.Order) {
+  delete mongoose.models.Order;
+}
+
+const Order = mongoose.model('Order', orderSchema);
 
 export default Order; 
