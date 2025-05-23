@@ -144,8 +144,15 @@ export default function Home() {
 
   return (
     <div className="container py-6">
-      {/* Product Carousel */}
+      {/* Featured Products Carousel */}
       <section className="mb-8">
+        <h2 className="text-2xl font-bold mb-4">Featured Products</h2>
+        <ProductCarousel products={allProducts.filter(p => p.images && p.images.length > 0).slice(0, 5)} />
+      </section>
+
+      {/* Top Selling Products Carousel */}
+      <section className="mb-8">
+        <h2 className="text-2xl font-bold mb-4">Top Selling Products</h2>
         <ProductCarousel products={allProducts.filter(p => p.topSelling)} />
       </section>
 
